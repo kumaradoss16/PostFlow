@@ -2,7 +2,7 @@
 
 **Document:** `TEST_PLAN.md`  
 **Product:** PostFlow  
-**Version:** 1.0  
+**Version:** 1.1  
 **Status:** Baseline QA Specification  
 **Platform:** Windows 10 / Windows 11 Desktop  
 **Architecture:** Tauri 2 + React + TypeScript + Python FastAPI + SQLite  
@@ -1301,3 +1301,165 @@ The most important testing priorities are:
 **QA owner:** Quality Assurance  
 **Review frequency:** Every major release and whenever a critical workflow or integration changes  
 **Approval status:** Pending implementation and test evidence
+
+
+---
+
+# 24. Roadmap-aligned milestone verification
+
+This section supplements the existing baseline test plan; it does not replace existing cases or acceptance-criteria references. Milestone sequencing is in ROADMAP.md and the detailed implementation backlog is in TASK_BREAKDOWN.md.
+
+| Milestone | Required verification | Exit evidence | Release impact |
+|---|---|---|---|
+| M0 Scope/architecture | Requirements consistency, platform feasibility, OS decision, risk review | Approved scope, decision log, platform evidence | Blocks implementation commitment |
+| M1 Desktop/persistence | Startup, loopback API, auth, migrations, workspace persistence, backup/restore | CI, migration, security and restore reports | P0 |
+| M2 Content/UI | CRUD, independent variants, revision conflicts, approval invalidation, accessibility | API/component/E2E reports | P0 |
+| M3 AI/media | Adapter contracts, secret redaction, disclosure, failure isolation, malicious media | Mock/live reports, secret scan, media fixtures | P0 for selected scope |
+| M4 OAuth/platform | State/PKCE, token lifecycle, scopes, account eligibility, real API capability | Sanitized OAuth and platform evidence | P0 for enabled platform |
+| M5 Publishing | Preflight, approval recheck, idempotency, immutable attempts, reconciliation | Fault injection and controlled publish evidence | P0 |
+| M6 Scheduler | Restart recovery, leases, concurrency, timezone/DST, missed-run behavior | Restart/concurrency/DST report | P0 |
+| M7 Release | Regression, security, backup, privacy, performance, installer, upgrade | Signed QA/release checklist | P0 |
+| M8 Expansion | New platform/provider contract and integration suite | Per-integration readiness record | Per feature |
+| M9 SaaS | Tenant isolation, identity, cloud security, privacy and operations | Separate SaaS threat model and release evidence | SaaS blocker |
+
+## 24.1 Milestone completion rules
+
+- UI presence or mocked success responses do not complete a milestone.
+- External tests blocked by app review/access must be marked BLOCKED, not PASS, with owner and next action.
+- A platform remains disabled for production publishing until live tests and permissions are verified.
+- A security control is complete only when negative tests prove prohibited actions are rejected.
+- A migration passes only after clean install and populated upgrade tests.
+- A scheduler passes only after restart, concurrent claim, timezone and uncertain-outcome tests.
+
+# 25. Additional critical test cases
+
+These additive cases strengthen coverage for SECURITY.md and THREAT_MODEL.md.
+
+### 25.1 Desktop runtime and local API
+
+| Test ID | Scenario | Expected result | Priority |
+|---|---|---|---|
+| REL-API-001 | Configure API bind to non-loopback | Unsafe bind rejected | P0 |
+| REL-API-002 | Request from untrusted Origin | Rejected unless exact trusted desktop origin | P0 |
+| REL-API-003 | Rotate installation secret | Old rejected; new works | P0 |
+| REL-API-004 | Backend startup failure | UI shows unavailable state; mutations disabled | P0 |
+| REL-API-005 | Flood local API within configured limits | Requests bounded; process remains responsive | P1 |
+
+### 25.2 Credential storage and privacy
+
+| Test ID | Scenario | Expected result | Priority |
+|---|---|---|---|
+| PRIV-001 | Store synthetic AI key; inspect DB/config/logs/API | No raw key found | P0 |
+| PRIV-002 | Store synthetic OAuth token; inspect DB/diagnostics | No raw token found | P0 |
+| PRIV-003 | OS credential store unavailable | Fail closed; no plaintext fallback | P0 |
+| PRIV-004 | Export backup | No plaintext credentials included | P0 |
+| PRIV-005 | Build support bundle | No prompts/content/media/secrets by default | P0 |
+| PRIV-006 | Generate without required provider disclosure | Request blocked | P0 |
+| PRIV-007 | Provider error contains synthetic secret | Error and audit log redact it | P0 |
+| PRIV-008 | Disconnect social account | Local secret removed; remote revoke attempted where supported | P0 |
+
+### 25.3 OAuth and platform readiness
+
+| Test ID | Scenario | Expected result | Priority |
+|---|---|---|---|
+| OAUTH-008 | Replay OAuth state after success | Rejected | P0 |
+| OAUTH-009 | Wrong platform or redirect callback | Rejected | P0 |
+| OAUTH-010 | Callback after state expiry | Rejected; user can restart | P0 |
+| OAUTH-011 | Concurrent refresh with token rotation | Only valid current token remains | P0 |
+| OAUTH-012 | Account lacks publish scope | Capability unavailable; preflight blocks | P0 |
+| PLATFORM-001 | Adapter claims unsupported operation | Capability registry rejects/marks unavailable | P0 |
+| PLATFORM-002 | Platform returns 429 with Retry-After | Retry honors server delay | P0 |
+| PLATFORM-003 | API version/permission changes | Integration degrades or disables; no false success | P1 |
+
+### 25.4 Approval, idempotency and reconciliation
+
+| Test ID | Scenario | Expected result | Priority |
+|---|---|---|---|
+| PUB-009 | Edit caption after approval | Approval invalidated; publish blocked | P0 |
+| PUB-010 | Change media association after approval | Reapproval required | P0 |
+| PUB-011 | Change destination after approval | Reapproval required | P0 |
+| PUB-012 | Same idempotency key and same fingerprint twice | One logical job | P0 |
+| PUB-013 | Same key with different payload | Conflict; no second job | P0 |
+| PUB-014 | Platform accepts post but response is lost | Reconciliation; no blind retry | P0 |
+| PUB-015 | Worker crashes after external success before local commit | Reconcile before retry | P0 |
+| PUB-016 | One destination succeeds, another fails | Success preserved; failure isolated | P0 |
+| PUB-017 | Cancel after external submission begins | Cannot promise remote cancellation | P0 |
+
+### 25.5 Media, URL and AI output
+
+| Test ID | Scenario | Expected result | Priority |
+|---|---|---|---|
+| MEDIA-008 | Misleading extension/magic-byte mismatch | Rejected or safely normalized | P0 |
+| MEDIA-009 | Extreme dimensions/decompression bomb | Rejected within resource limits | P0 |
+| MEDIA-010 | Traversal/Unicode filename | Generated path remains inside media root | P0 |
+| MEDIA-011 | FFmpeg exceeds time/resource limit | Process terminated; partial asset not valid | P1 |
+| AI-009 | Model returns script/HTML | Escaped text; never executed | P0 |
+| AI-010 | Prompt injection asks for credentials/tool action | No credential/tool access; action blocked | P0 |
+| AI-011 | Provider timeout | Content preserved; no silent fallback | P0 |
+| SSRF-001 | URL import targets private/loopback address | Blocked; if feature absent, endpoint remains absent | P0 if implemented |
+
+### 25.6 Scheduler and recovery
+
+| Test ID | Scenario | Expected result | Priority |
+|---|---|---|---|
+| SCH-005 | Two workers claim same due job | Exactly one active claim | P0 |
+| SCH-006 | App exits after claim before submission | Lease recovery returns safe state | P0 |
+| SCH-007 | App exits after external submission before persistence | Reconcile; no blind retry | P0 |
+| SCH-008 | Schedule crosses DST boundary | Defined timezone policy applied deterministically | P0 |
+| SCH-009 | Device asleep at scheduled time | Missed-run policy applied and surfaced | P0 |
+| SCH-010 | User pauses all publishing | No new submission after pause acknowledgement | P0 |
+
+### 25.7 SaaS-only tests
+
+Not desktop MVP gates; mandatory before SaaS launch:
+- Client cannot override authenticated tenant context.
+- Every resource route enforces object-level tenant authorization.
+- Jobs and media enforce tenant boundaries.
+- Role escalation and invitation abuse are tested.
+- Session invalidation and MFA recovery are tested.
+- Backup restore cannot cross tenant boundaries.
+- Deletion, legal holds and retention are verified per tenant.
+- Cloud secrets, service identities, egress and operational access are reviewed.
+
+# 26. Quality gates and go/no-go rules
+
+1. **P0:** All applicable P0 tests pass. No waiver for credential exposure, unauthorized publishing, stale approval, duplicate publishing, cross-workspace access, unrecoverable corruption or failed backup restore.
+2. **Security:** No unresolved Critical or High exploitable finding. Accepted Medium risks require owner, rationale, mitigation, review date and approval.
+3. **Publishing:** Fault injection covers lost response, process crash, concurrent duplicate request and partial destination success.
+4. **Integrations:** Only integrations with verified official API access, scopes, account eligibility and live test evidence may be enabled.
+5. **Data:** Clean migration, populated upgrade, integrity checks, backup and isolated restore pass.
+6. **Privacy:** Shipped data flows, retention and deletion match the user-facing notice.
+7. **Performance:** Record measurements on baseline supported hardware; do not report targets as achieved without measurements.
+8. **Packaging:** Clean install, upgrade, signature verification, launch, shutdown and uninstall pass.
+9. **Evidence:** Each gate has build ID, environment, report, owner and approval. Blocked external tests remain blocked.
+10. **Decision:** Release owner records GO/NO-GO and accepted non-blocking limitations.
+
+## 26.1 Required release evidence bundle
+
+- CI run and commit/build identifiers.
+- Unit, component, API, integration and E2E reports.
+- Alembic migration and SQLite integrity output.
+- Security/dependency scan reports.
+- Secret-canary scan of database, logs, exports and package.
+- OAuth and platform capability verification.
+- Controlled publishing and reconciliation report.
+- Scheduler restart/concurrency/DST report.
+- Backup/restore evidence.
+- Performance and compatibility report.
+- Installer signature and install/upgrade smoke report.
+- Privacy notice review and release sign-off.
+
+## 26.2 Test ownership
+
+| Area | Responsible | Approval |
+|---|---|---|
+| Unit/module | Feature developer | Technical lead |
+| API/database/integration | Backend developer | Technical lead/QA |
+| UI/E2E | Frontend developer/QA | QA owner |
+| OAuth/platform live | Integration engineer | Product owner |
+| Security/privacy | Security reviewer/QA | Product owner |
+| Backup/restore | Backend/QA | Technical lead |
+| Installer/update | Release owner | Product owner |
+| Final go/no-go | QA owner compiles evidence | Product/release owner |
+
+**Final principle:** PostFlow is a stateful system with authority to publish externally. The release bar is correctness under failure, not merely a successful demo.
