@@ -15,31 +15,33 @@ PostFlow/
 │       ├── src-tauri/              # Rust/Tauri commands and lifecycle
 │       ├── public/
 │       └── package.json
-├── backend/
-│   ├── pyproject.toml
-│   ├── alembic.ini
-│   ├── migrations/
-│   │   └── versions/
-│   ├── src/postflow/
-│   │   ├── main.py                 # app factory entrypoint
-│   │   ├── api/
-│   │   ├── application/
-│   │   ├── domain/
-│   │   ├── infrastructure/
-│   │   ├── persistence/
-│   │   └── security/
-│   └── tests/
-│       ├── unit/
-│       ├── integration/
-│       └── contract/
-├── scripts/
-├── docs/
-├── .github/workflows/
-├── .editorconfig
-├── .gitignore
-├── .pre-commit-config.yaml
-├── package.json
-├── pnpm-lock.yaml
+├── apps/
+│   ├── backend/
+│   │   ├── pyproject.toml
+│   │   ├── alembic.ini
+│   │   ├── migrations/
+│   │   │   └── versions/
+│   │   ├── src/postflow/
+│   │   │   ├── main.py             # app factory entrypoint
+│   │   │   ├── api/
+│   │   │   ├── application/
+│   │   │   ├── domain/
+│   │   │   ├── infrastructure/
+│   │   │   ├── persistence/
+│   │   │   └── security/
+│   │   └── tests/
+│   │       ├── unit/
+│   │       ├── integration/
+│   │       └── contract/
+│   ├── scripts/
+│   ├── docs/
+│   ├── .github/workflows/
+│   ├── .editorconfig
+│   ├── .gitignore
+│   ├── .pre-commit-config.yaml
+│   ├── package.json
+│   ├── pnpm-lock.yaml
+│   └── README.md
 └── README.md
 ```
 
