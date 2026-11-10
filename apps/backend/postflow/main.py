@@ -53,10 +53,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["*"],
     )
 
-    # Register API routes
-    app.include_router(api_v1_router)
-    # Also mount root health router for direct /health queries
-    app.include_router(root_health_router, prefix="", tags=["health"])
+    # Register API routes conditionally based on environment.
+    # Per LOCAL_API_SECURITY_SPEC.md (Section 3.3), unauthenticated HTTP endpoints are strictly
+    # prohibited in production. Unauthenticated /health endpoints are mounted solely in development
+    # and test environments for developer smoke verification and automated test fixtures.
+    # In production (M1.2+), process readiness is handled exclusively via the protected
+    # bootstrap channel.
+    if settings.environment in ("development", "test"):
+        app.include_router(api_v1_router)
+        app.include_router(root_health_router, prefix="", tags=["health"])
 
     return app
 
