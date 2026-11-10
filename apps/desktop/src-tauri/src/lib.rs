@@ -22,7 +22,7 @@ pub struct BackendHealthResponse {
 
 /// Retrieve desktop application identity and platform metadata.
 #[tauri::command]
-pub fn get_app_info() -> Result<AppInfoResponse, String> {
+fn get_app_info() -> Result<AppInfoResponse, String> {
     Ok(AppInfoResponse {
         name: "PostFlow".to_string(),
         version: env!("CARGO_PKG_VERSION").to_string(),
@@ -37,7 +37,7 @@ pub fn get_app_info() -> Result<AppInfoResponse, String> {
 /// NOTE: In M1.2, this is replaced by the supervised child process
 /// lifecycle and protected bootstrap pipe handshake.
 #[tauri::command]
-pub fn check_backend_health() -> Result<BackendHealthResponse, String> {
+fn check_backend_health() -> Result<BackendHealthResponse, String> {
     Ok(BackendHealthResponse {
         status: "ok".to_string(),
         version: "0.1.0".to_string(),
@@ -60,7 +60,7 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{check_backend_health, get_app_info};
+    use super::*;
 
     #[test]
     fn test_get_app_info() {
