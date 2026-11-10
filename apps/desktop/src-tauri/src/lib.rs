@@ -22,7 +22,7 @@ pub struct BackendHealthResponse {
 
 /// Retrieve desktop application identity and platform metadata.
 #[tauri::command]
-pub fn get_app_info() -> Result<AppInfoResponse, String> {
+fn get_app_info() -> Result<AppInfoResponse, String> {
     Ok(AppInfoResponse {
         name: "PostFlow".to_string(),
         version: env!("CARGO_PKG_VERSION").to_string(),
@@ -37,7 +37,7 @@ pub fn get_app_info() -> Result<AppInfoResponse, String> {
 /// NOTE: In M1.2, this is replaced by the supervised child process
 /// lifecycle and protected bootstrap pipe handshake.
 #[tauri::command]
-pub fn check_backend_health() -> Result<BackendHealthResponse, String> {
+fn check_backend_health() -> Result<BackendHealthResponse, String> {
     Ok(BackendHealthResponse {
         status: "ok".to_string(),
         version: "0.1.0".to_string(),
@@ -53,10 +53,7 @@ fn rustc_version_runtime() -> String {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![
-            get_app_info,
-            check_backend_health
-        ])
+        .invoke_handler(tauri::generate_handler![get_app_info, check_backend_health])
         .run(tauri::generate_context!())
         .expect("error while running PostFlow desktop application");
 }
