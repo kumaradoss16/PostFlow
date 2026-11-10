@@ -1690,3 +1690,9 @@ The first release must prioritize a working end-to-end workflow over a large num
 | QA Lead | Review testability and acceptance criteria | Pending |
 
 **Next document:** `USER_STORIES.md` - Detailed user stories, actors, workflows, preconditions, postconditions and edge cases.
+
+## M0 Reconciliation — Controlling MVP Scope
+
+**Authority:** `docs/IMPLEMENTATION_BASELINE.md` and `docs/BUILD_READINESS_REPORT.md`. This addendum supersedes conflicting MVP scope and priorities in this document. The target is a single-user, local-first Windows desktop MVP. Windows 11 is the production support baseline; Windows 10 is best-effort development only. P0 includes Tauri 2/Rust, React/TypeScript, supervised FastAPI, SQLite/SQLAlchemy/Alembic, local media, source content and independent revisioned variants, one AI provider, exact human approval, durable per-destination publishing jobs, idempotency/immutable attempts/unknown-outcome reconciliation, one-time local scheduling, privacy, backup and restore. At most one official social-platform integration may be enabled, and only after a documented PASS feasibility gate. Scheduling requires the app/worker active, device awake and internet available. Campaigns, team membership/roles, collaboration, billing, SaaS, cloud scheduling, public API, cloud media relay, additional AI providers/platforms, multi-provider comparison/fallback and advanced social analytics are P1/Future, not MVP requirements.
+
+Remove provider-count and platform-count targets as MVP success metrics. Measure verified outcomes: clean Windows 11 install, secure local API, persistence/restore, source/variant isolation, exact-approval enforcement, no blind retry of unknown outcomes, one live AI-provider workflow and verified live publishing only if the platform gate passes. PRD approval remains pending until product-owner acceptance is recorded.
