@@ -34,11 +34,12 @@ Development may launch the backend using the pinned Python environment. Producti
 1. Tauri resolves an absolute, application-owned data directory and creates it with restrictive user-only permissions where Windows permits.
 2. Rust loads the installation credential from Windows Credential Manager/DPAPI integration. If absent, it generates at least 256 bits from the OS cryptographic RNG and stores it before proceeding.
 3. Rust creates a one-time, bidirectional bootstrap channel using an explicitly inherited Windows pipe handle (or a separately reviewed equivalent). Restrict handle inheritance to the intended child process; do not expose the channel to unrelated child processes.
-4. Rust launches the sidecar with explicit arguments, a controlled working directory, minimal environment and no shell interpolation. Pass only non-secret configuration, such as the application data path, through validated arguments or a controlled environment.
-5. Backend binds its listener directly to numeric `127.0.0.1` with port `0` (OS-assigned ephemeral port). It must fail closed on any host other than `127.0.0.1`.
-6. Backend initializes logging and database connectivity, starts serving, and completes required migrations before declaring readiness.
-7. Backend sends a readiness message over the bootstrap channel containing protocol version, actual bound address/port and a fresh process nonce. Do not treat process creation or an open TCP port as readiness.
-8. Rust validates that the reported address is exactly `127.0.0.1`, the port is valid and nonzero, the protocol version is supported, and the process nonce matches the current launch. Rust then provisions the installation secret through the protected channel, closes the bootstrap channel and enables the narrow IPC proxy.
+4. Rust generates a cryptographically random, single-launch challenge and sends a versioned bootstrap configuration containing that challenge and the validated data-directory path over the pipe. No secret is included yet.
+5. Rust launches the sidecar with explicit arguments, a controlled working directory, minimal environment and no shell interpolation. Pass only non-secret configuration through validated arguments or a controlled environment.
+6. Backend reads and validates the bootstrap configuration, then binds its listener directly to numeric `127.0.0.1` with port `0` (OS-assigned ephemeral port). It must fail closed on any host other than `127.0.0.1`.
+7. Backend initializes logging and database connectivity, completes required migrations and starts serving. Every HTTP endpoint rejects requests until authentication is initialized.
+8. Backend sends a readiness message over the protected pipe containing protocol version, the echoed launch challenge, actual bound address/port and a fresh backend nonce. Do not treat process creation or an open TCP port as readiness.
+9. Rust validates the echoed challenge, supported protocol version, actual child process identity using the OS process handle, exact address `127.0.0.1` and valid nonzero port. Rust then provisions the installation secret through the protected pipe, waits for backend acknowledgement that authentication is active, closes the pipe and enables the narrow IPC proxy.
 9. React receives a typed `backendReady` state through Tauri events/commands. Until then, the UI shows a startup state with bounded timeout and actionable failure.
 
 Startup must be bounded. Define and test a startup deadline (initial target 30 seconds on supported baseline hardware); do not loop indefinitely.
@@ -46,7 +47,7 @@ Startup must be bounded. Define and test a startup deadline (initial target 30 s
 ## 4. Port binding and listener ownership
 
 - Bind only to numeric IPv4 loopback `127.0.0.1`; do not use `0.0.0.0`, `::`, hostname `localhost`, LAN interfaces or wildcard hosts.
-- The backend asks the OS for an ephemeral port by binding `127.0.0.1:0`; Rust accepts only the validated address reported by the child. This avoids a cross-process socket-reservation handoff and its time-of-check/time-of-use race.
+- The backend asks the OS for an ephemeral port by binding `127.0.0.1:0`; Rust accepts only the validated address reported by the child after checking the one-time launch challenge and OS child-process identity. This avoids a cross-process socket-reservation handoff and its time-of-check/time-of-use race.
 - Backend startup fails closed if configured host is not exactly `127.0.0.1`.
 - Backend must report the actual bound socket address; Rust validates it before enabling requests.
 - Rust must not independently probe an available port and then ask the backend to bind it.
@@ -137,6 +138,8 @@ Structured logs include timestamp, severity, process role, correlation ID, opera
 - backend missing/corrupt; startup timeout; wrong protocol version;
 - backend attempts non-loopback bind;
 - readiness reports wildcard, IPv6, LAN or unexpected address and Rust refuses to enable IPC;
+- readiness with a missing/incorrect launch challenge, wrong child identity or unsupported protocol is rejected;
+- backend does not accept authenticated operational requests until Rust provisions the secret and receives an initialization acknowledgement;
 - bootstrap pipe handle inheritance is restricted to the intended backend process;
 - port collision and bind failure;
 - readiness before database initialization is rejected;
