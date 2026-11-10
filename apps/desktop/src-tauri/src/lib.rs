@@ -60,7 +60,7 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{check_backend_health, get_app_info};
 
     #[test]
     fn test_get_app_info() {
