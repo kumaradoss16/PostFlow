@@ -2373,3 +2373,7 @@ It is **reliable, authorized and recoverable publishing across the platforms Pos
 **Review frequency:** Monthly for API compatibility and quarterly for policy and commercial terms  
 **Next review:** 8 December 2026  
 **Related documents:** `PRODUCT_VISION.md`, `PRD.md`, `USER_STORIES.md`, `ACCEPTANCE_CRITERIA.md`, `TEST_PLAN.md`, `TRACEABILITY_MATRIX.md`, `MARKET_RESEARCH.md`, `ARCHITECTURE.md`, `API_SPECIFICATION.md`, `SECURITY.md`
+
+## M0 Reconciliation — Platform Selection Gate
+
+**Authority:** `docs/IMPLEMENTATION_BASELINE.md` and `docs/BUILD_READINESS_REPORT.md`. Only one candidate may be selected for the first MVP. Record dated evidence for developer account/app access; native/public OAuth and PKCE or approved alternative; test-account eligibility; publishing scopes; app review/business verification; official publishing support; media upload without unapproved public relay; rate limits/terms/fees; outcome reconciliation; and controlled authorization/publish evidence. Mark PASS, CONDITIONAL or FAIL. PASS permits adapter implementation; CONDITIONAL permits mock/contract work only; FAIL blocks automated publishing. If none passes, ship platform-neutral content creation/manual export and do not claim automated publishing.
