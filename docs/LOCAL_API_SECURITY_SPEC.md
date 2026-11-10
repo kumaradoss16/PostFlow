@@ -54,7 +54,7 @@ The React frontend never receives the secret. Rust attaches it to fixed, allowli
 
 ### 3.3 Authentication protocol
 
-Use a dedicated header such as `X-PostFlow-Local-Auth`; reject credentials in query strings, cookies or request bodies. Require authentication on all non-health operational routes. Health/readiness endpoints must reveal only minimal status and must not expose filesystem paths, versions beyond protocol compatibility, environment, configuration or secret material. Prefer making health requests available only through the authenticated Rust channel after bootstrap.
+Use a dedicated header such as `X-PostFlow-Local-Auth`; reject credentials in query strings, cookies or request bodies. Require authentication on every HTTP endpoint, including health and operational status. The process-readiness handshake occurs over the protected bootstrap pipe, not an unauthenticated HTTP endpoint. If an unauthenticated liveness endpoint is ever proposed, it requires a documented threat review and must disclose no state beyond a fixed liveness response.
 
 Rotate the installation secret on explicit security reset, credential-store loss/recreation or suspected compromise. If secure storage is unavailable, fail closed; do not fall back to plaintext.
 
@@ -63,6 +63,9 @@ Rotate the installation secret on explicit security reset, credential-store loss
 - Validate `Host` against the exact loopback address and selected port.
 - For browser-originated requests, allow only the exact Tauri application origin(s) required by the packaged runtime; reject `null`, arbitrary `http://localhost`, arbitrary ports, `file://` and untrusted web origins unless a documented Tauri runtime requires a specific exception.
 - Rust proxy requests are the only supported production frontend path.
+- Production browser-originated HTTP calls to the local API are unsupported; the React WebView must use typed Tauri IPC only.
+- Configure a restrictive Tauri v2-compatible Content Security Policy: no remote scripts, no `unsafe-eval`, and no broad `connect-src` or wildcard sources. Deny untrusted top-level navigation and unapproved new windows; external links must open through an explicit native allowlisted action.
+- Disable or restrict production developer tools and remote debugging according to the Tauri release configuration.
 - Disable permissive CORS (`*`) and credentialed cross-origin access.
 - Validate `Origin` and `Sec-Fetch-Site` where available, but do not treat them as authentication.
 - Reject DNS rebinding patterns and unexpected hostnames by validating numeric socket destination and Host.
@@ -121,7 +124,8 @@ If a provider requires confidential client authentication, defer integration or 
 | Loopback-only | Wildcard/LAN bind attempts fail; LAN probe cannot connect |
 | Authentication | Missing, malformed and wrong secret return generic 401/403 |
 | Secret isolation | Secret absent from bundle, React runtime, SQLite, args, env, logs |
-| Origin/Host | Malicious origin, null origin and Host mismatch rejected |
+| Origin/Host | Untrusted browser Origin, null origin and Host mismatch rejected; Rust-native proxy follows the documented no-Origin contract |
+| WebView boundary | CSP blocks remote script/connect sources; untrusted navigation and new windows are denied |
 | Proxy allowlist | Arbitrary URL/method/header forwarding impossible |
 | Input limits | Oversized body and malformed DTO rejected before business logic |
 | Rate limits | Repeated failures are bounded and logged safely |
