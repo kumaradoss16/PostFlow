@@ -41,6 +41,8 @@ Also run a development smoke test on the user's constrained Windows 10 environme
 | M1-AT-012 | Secret isolation | Inspect bundle, args, env, frontend storage, DB and logs | No installation secret is present | Block |
 | M1-AT-013 | Narrow proxy | Attempt arbitrary URL/method via frontend IPC | No generic forwarding capability exists | Block |
 | M1-AT-033 | Bootstrap pipe isolation | Inspect child process handle inheritance and attempt access from unrelated child | Only the intended backend receives the bootstrap channel | Block |
+| M1-AT-035 | Bootstrap challenge/identity | Tamper with launch challenge, protocol version or child identity | Rust rejects readiness and does not enable IPC | Block |
+| M1-AT-036 | Authentication activation barrier | Send operational HTTP requests before secret provisioning/acknowledgement | All requests are rejected; IPC is enabled only after acknowledgement | Block |
 | M1-AT-034 | WebView CSP/navigation | Attempt remote script load, remote connect, untrusted navigation and popup | CSP blocks remote content; navigation/popup denied or routed through explicit allowlist | Block |
 | M1-AT-014 | Backend crash | Terminate backend while UI open | UI becomes unavailable; no false success; bounded recovery | Block |
 | M1-AT-015 | Graceful shutdown | Exit app normally | Backend stops and process is reaped | Block |
