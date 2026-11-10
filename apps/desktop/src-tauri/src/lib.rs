@@ -53,10 +53,7 @@ fn rustc_version_runtime() -> String {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![
-            get_app_info,
-            check_backend_health
-        ])
+        .invoke_handler(tauri::generate_handler![get_app_info, check_backend_health])
         .run(tauri::generate_context!())
         .expect("error while running PostFlow desktop application");
 }
