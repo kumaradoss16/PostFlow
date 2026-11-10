@@ -1,0 +1,50 @@
+# Dependencies and environments
+node_modules/
+.pnpm-store/
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+target/
+
+# Tauri & Desktop build artifacts
+apps/desktop/src-tauri/target/
+apps/desktop/dist/
+
+# IDE & Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Environment & Secrets (NEVER commit secrets or credentials)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+
+# Database & Runtime local data
+*.sqlite
+*.sqlite3
+*.db
+*.log
+data/
+app_data/
+storage/
+
+# Test & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/

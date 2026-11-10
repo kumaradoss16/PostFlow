@@ -1,0 +1,23 @@
+{
+  "name": "postflow",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PostFlow — Local-First Content Creation, Scheduling and Publishing Desktop Modular Monolith",
+  "packageManager": "pnpm@12.18.0",
+  "scripts": {
+    "dev:desktop": "pnpm --filter @postflow/desktop dev",
+    "dev:backend": "powershell -ExecutionPolicy Bypass -File ./scripts/dev-backend.ps1",
+    "build": "pnpm --filter @postflow/desktop build",
+    "typecheck": "pnpm --filter @postflow/contracts typecheck && pnpm --filter @postflow/desktop typecheck",
+    "lint:frontend": "pnpm --filter @postflow/desktop lint",
+    "lint:backend": "powershell -ExecutionPolicy Bypass -Command \"& apps/backend/.venv/Scripts/ruff.exe check apps/backend; & apps/backend/.venv/Scripts/ruff.exe format --check apps/backend\"",
+    "lint": "pnpm lint:frontend && pnpm lint:backend",
+    "test:frontend": "pnpm --filter @postflow/desktop test",
+    "test:backend": "powershell -ExecutionPolicy Bypass -File ./scripts/test-backend.ps1",
+    "test": "pnpm test:frontend && pnpm test:backend",
+    "verify": "powershell -ExecutionPolicy Bypass -File ./scripts/verify-all.ps1"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3"
+  }
+}
