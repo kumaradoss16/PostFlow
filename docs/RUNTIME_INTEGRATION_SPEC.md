@@ -33,12 +33,12 @@ Development may launch the backend using the pinned Python environment. Producti
 
 1. Tauri resolves an absolute, application-owned data directory and creates it with restrictive user-only permissions where Windows permits.
 2. Rust loads the installation credential from Windows Credential Manager/DPAPI integration. If absent, it generates at least 256 bits from the OS cryptographic RNG and stores it before proceeding.
-3. Rust binds a loopback TCP listener to `127.0.0.1:0` to obtain an ephemeral port. It retains ownership of the reservation or uses a race-resistant handoff design; a check-then-bind port selection is prohibited.
-4. Rust creates a one-time bootstrap channel (inherited pipe/anonymous pipe or equivalent protected local IPC). The port, data path and one-time bootstrap material are passed without command-line secrets or environment variables visible to child processes unrelated to the backend.
-5. Rust launches the sidecar with explicit arguments, a controlled working directory, minimal environment and no shell interpolation.
-6. Backend validates configuration, confirms the bind address is exactly loopback, initializes logging and database connectivity, and starts serving.
-7. Backend completes initialization and emits a readiness message over the bootstrap channel containing protocol version, actual bound address/port and a fresh process nonce. Do not treat process creation or an open TCP port as readiness.
-8. Rust validates the readiness message, expected port/address, protocol version and nonce; then closes the bootstrap channel and enables the narrow IPC proxy.
+3. Rust creates a one-time, bidirectional bootstrap channel using an explicitly inherited Windows pipe handle (or a separately reviewed equivalent). Restrict handle inheritance to the intended child process; do not expose the channel to unrelated child processes.
+4. Rust launches the sidecar with explicit arguments, a controlled working directory, minimal environment and no shell interpolation. Pass only non-secret configuration, such as the application data path, through validated arguments or a controlled environment.
+5. Backend binds its listener directly to numeric `127.0.0.1` with port `0` (OS-assigned ephemeral port). It must fail closed on any host other than `127.0.0.1`.
+6. Backend initializes logging and database connectivity, starts serving, and completes required migrations before declaring readiness.
+7. Backend sends a readiness message over the bootstrap channel containing protocol version, actual bound address/port and a fresh process nonce. Do not treat process creation or an open TCP port as readiness.
+8. Rust validates that the reported address is exactly `127.0.0.1`, the port is valid and nonzero, the protocol version is supported, and the process nonce matches the current launch. Rust then provisions the installation secret through the protected channel, closes the bootstrap channel and enables the narrow IPC proxy.
 9. React receives a typed `backendReady` state through Tauri events/commands. Until then, the UI shows a startup state with bounded timeout and actionable failure.
 
 Startup must be bounded. Define and test a startup deadline (initial target 30 seconds on supported baseline hardware); do not loop indefinitely.
@@ -46,9 +46,10 @@ Startup must be bounded. Define and test a startup deadline (initial target 30 s
 ## 4. Port binding and listener ownership
 
 - Bind only to numeric IPv4 loopback `127.0.0.1`; do not use `0.0.0.0`, `::`, hostname `localhost`, LAN interfaces or wildcard hosts.
-- Rust chooses an ephemeral port to avoid fixed-port collisions.
+- The backend asks the OS for an ephemeral port by binding `127.0.0.1:0`; Rust accepts only the validated address reported by the child. This avoids a cross-process socket-reservation handoff and its time-of-check/time-of-use race.
 - Backend startup fails closed if configured host is not exactly `127.0.0.1`.
 - Backend must report the actual bound socket address; Rust validates it before enabling requests.
+- Rust must not independently probe an available port and then ask the backend to bind it.
 - Do not expose the port in external deep links, logs or telemetry. Local diagnostic display may show a redacted status, not credentials.
 - A port conflict or bind failure is a startup failure; do not silently select a different host or disable authentication.
 
@@ -135,6 +136,8 @@ Structured logs include timestamp, severity, process role, correlation ID, opera
 
 - backend missing/corrupt; startup timeout; wrong protocol version;
 - backend attempts non-loopback bind;
+- readiness reports wildcard, IPv6, LAN or unexpected address and Rust refuses to enable IPC;
+- bootstrap pipe handle inheritance is restricted to the intended backend process;
 - port collision and bind failure;
 - readiness before database initialization is rejected;
 - child process crash while idle and during request;
