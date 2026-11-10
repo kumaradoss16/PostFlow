@@ -275,3 +275,7 @@ A release must be blocked if any of the following is true:
 - [ ] Backup/export and deletion behavior verified.
 - [ ] Dependency, secret, and release-signing checks pass.
 - [ ] Security limitations and supported OS versions disclosed.
+
+## M0 Reconciliation — Mandatory Desktop Security Controls
+
+**Authority:** `docs/IMPLEMENTATION_BASELINE.md` and `docs/BUILD_READINESS_REPORT.md`. FastAPI binds to 127.0.0.1 only. Loopback requests are authenticated; CORS is not authentication. Rust/Tauri owns the installation secret and narrow proxy; React never receives it. API keys/OAuth tokens use Windows Credential Manager or DPAPI-backed storage; SQLite stores opaque references only. OAuth uses system browser and public-client PKCE S256 where supported; never embed a confidential client secret. If native secure OAuth is unsupported, defer integration or approve a separately reviewed broker. AI transmission is disclosed; no silent fallback. Approval is exact revision/destination/media/payload bound and rechecked before publish. Unknown outcomes are reconciled, not blindly retried. Media uses generated paths and bounded validation; no generic public relay. Logs/backups/errors exclude secrets and sensitive payloads.
