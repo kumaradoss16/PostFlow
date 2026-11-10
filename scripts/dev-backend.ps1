@@ -22,5 +22,8 @@ if (-not (Test-Path $VenvPython)) {
 }
 
 Write-Host "Starting PostFlow backend on http://$HostAddress`:$Port (Development Mode)..."
-$ReloadArg = if ($Reload) { "--reload" } else { "" }
-& $VenvPython -m postflow.main --host $HostAddress --port $Port $ReloadArg
+$BackendArgs = @("--host", $HostAddress, "--port", "$Port")
+if ($Reload) {
+    $BackendArgs += "--reload"
+}
+& $VenvPython -m postflow.main @BackendArgs
