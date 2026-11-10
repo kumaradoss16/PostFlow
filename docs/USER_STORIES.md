@@ -2309,3 +2309,9 @@ The product must prioritize functional reliability, security, data integrity and
 | Security Reviewer | Validate security-related stories | Pending |
 
 **Next document:** `ACCEPTANCE_CRITERIA.md` - Consolidated, measurable product acceptance criteria and release validation scenarios.
+
+## M0 Reconciliation — Story Priority Override
+
+**Authority:** `docs/IMPLEMENTATION_BASELINE.md` and `docs/BUILD_READINESS_REPORT.md`. This addendum supersedes conflicting MVP scope and priorities in this document. The target is a single-user, local-first Windows desktop MVP. Windows 11 is the production support baseline; Windows 10 is best-effort development only. P0 includes Tauri 2/Rust, React/TypeScript, supervised FastAPI, SQLite/SQLAlchemy/Alembic, local media, source content and independent revisioned variants, one AI provider, exact human approval, durable per-destination publishing jobs, idempotency/immutable attempts/unknown-outcome reconciliation, one-time local scheduling, privacy, backup and restore. At most one official social-platform integration may be enabled, and only after a documented PASS feasibility gate. Scheduling requires the app/worker active, device awake and internet available. Campaigns, team membership/roles, collaboration, billing, SaaS, cloud scheduling, public API, cloud media relay, additional AI providers/platforms, multi-provider comparison/fallback and advanced social analytics are P1/Future, not MVP requirements.
+
+Keep one provider-agnostic AI capability plus one selected provider implementation at P0; move other named provider adapters, comparison and fallback to P1/Future. Additional social adapters are P1. Account/OAuth/publishing stories are conditional on PASS. Move campaigns, memberships/roles, team workflows and advanced analytics out of P0. Every P0 story must map to an acceptance criterion, implementation task and test ID; epic-level mapping alone is insufficient.
