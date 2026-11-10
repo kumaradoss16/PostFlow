@@ -94,14 +94,24 @@ def main() -> None:
 
     import uvicorn
 
-    app = create_app()
-    uvicorn.run(
-        app,
-        host="127.0.0.1",
-        port=args.port,
-        reload=args.reload,
-        log_level="info",
-    )
+    if args.reload:
+        uvicorn.run(
+            "postflow.main:create_app",
+            factory=True,
+            host="127.0.0.1",
+            port=args.port,
+            reload=True,
+            log_level="info",
+        )
+    else:
+        app = create_app()
+        uvicorn.run(
+            app,
+            host="127.0.0.1",
+            port=args.port,
+            reload=False,
+            log_level="info",
+        )
 
 
 if __name__ == "__main__":

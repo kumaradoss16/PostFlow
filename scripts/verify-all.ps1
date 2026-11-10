@@ -49,15 +49,34 @@ Push-Location (Join-Path $PSScriptRoot "..\apps\desktop\src-tauri")
 try {
     $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
     
-    # Check if MSVC link.exe is available; if not, use GNU toolchain
-    $HasMsvc = (Get-Command "link.exe" -ErrorAction SilentlyContinue) -ne $null
-    $CargoCmd = if ($HasMsvc) { "cargo" } else { "cargo +stable-x86_64-pc-windows-gnu" }
-    
-    Write-Host "Running Cargo check ($CargoCmd)..."
-    Invoke-Expression "$CargoCmd check"
+    Write-Host "Running Cargo format check..."
+    cargo fmt --all -- --check
+    if ($LASTEXITCODE -ne 0) {
+        throw "cargo fmt check failed!"
+    }
 
-    Write-Host "Running Cargo test ($CargoCmd)..."
-    Invoke-Expression "$CargoCmd test"
+    $HasMsvc = (Get-Command "link.exe" -ErrorAction SilentlyContinue) -ne $null
+    $HasGnu = (Get-Command "dlltool.exe" -ErrorAction SilentlyContinue) -ne $null
+    if ($HasMsvc) {
+        Write-Host "Running Cargo check (MSVC toolchain)..."
+        cargo check
+        if ($LASTEXITCODE -ne 0) { throw "cargo check failed!" }
+
+        Write-Host "Running Cargo test (MSVC toolchain)..."
+        cargo test
+        if ($LASTEXITCODE -ne 0) { throw "cargo test failed!" }
+    } elseif ($HasGnu) {
+        Write-Host "Running Cargo check (GNU toolchain)..."
+        cargo +stable-x86_64-pc-windows-gnu check
+        if ($LASTEXITCODE -ne 0) { throw "cargo check failed!" }
+
+        Write-Host "Running Cargo test (GNU toolchain)..."
+        cargo +stable-x86_64-pc-windows-gnu test
+        if ($LASTEXITCODE -ne 0) { throw "cargo test failed!" }
+    } else {
+        Write-Host "[WARNING] Neither MSVC (link.exe) nor MinGW (dlltool.exe) was detected in local PATH." -ForegroundColor Yellow
+        Write-Host "Cargo format check PASSED. Full Rust compilation and test execution are verified in CI (windows-latest)." -ForegroundColor Yellow
+    }
 } finally {
     Pop-Location
 }
