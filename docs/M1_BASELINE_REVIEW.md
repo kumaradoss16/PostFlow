@@ -29,6 +29,7 @@ There was therefore no reviewer-authored feedback or CI evidence to resolve. The
 | M1-RV-04 | High | WebView security was described mainly through API Origin/Host checks and Tauri permission minimization. The baseline did not explicitly require a restrictive CSP and navigation/new-window policy. | Corrected in follow-up branch: explicit CSP, no remote scripts/unsafe-eval/broad connect sources, and deny-by-default untrusted navigation/popups. Added acceptance tests. |
 | M1-RV-05 | Medium | The initial acceptance matrix did not explicitly test bootstrap pipe handle inheritance or WebView CSP/navigation behavior. | Corrected in follow-up branch with M1-AT-033 and M1-AT-034. |
 | M1-RV-06 | Medium | M1 sequencing could be read as permitting scaffold work before the Product Owner accepts the controlling baseline. | Corrected in follow-up branch: M1.0 requires explicit PO acceptance; M1.1 depends on M1.0 and merge of the accepted baseline. |
+| M1-RV-07 | Medium | The initial readiness nonce wording did not define how Rust proves that the readiness message belongs to the current child launch. | Corrected in follow-up branch: Rust sends a one-launch challenge over the protected pipe; readiness echoes it, Rust verifies OS child-process identity, and secret activation requires an explicit backend acknowledgement. Added acceptance tests. |
 
 ## 3. Architectural decisions retained
 
