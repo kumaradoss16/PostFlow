@@ -35,9 +35,18 @@ def test_root_health_endpoint(test_client: TestClient) -> None:
     assert data["version"] == "0.1.0"
 
 
+def test_production_environment_omits_unauthenticated_health_endpoints() -> None:
+    """Verify that in production environment, unauthenticated health routes are omitted."""
+    settings = Settings(environment="production")
+    app = create_app(settings=settings)
+    client = TestClient(app, base_url="http://127.0.0.1")
+    assert client.get("/health").status_code == 404
+    assert client.get("/api/v1/health").status_code == 404
+
+
 def test_rejects_untrusted_host_header() -> None:
     """Verify requests with untrusted Host header are rejected by TrustedHostMiddleware."""
-    settings = Settings(environment="production")
+    settings = Settings(environment="development")
     app = create_app(settings=settings)
     client = TestClient(app, base_url="http://127.0.0.1")
     # Send request with hostile Host header
