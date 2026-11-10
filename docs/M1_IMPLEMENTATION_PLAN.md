@@ -75,8 +75,8 @@ A task that appears in a legacy PRD, schema, prototype or backlog is not authori
 
 | Increment | Work | Dependencies | Exit condition |
 |---|---|---|---|
-| M1.0 | Freeze decisions, repo conventions, toolchain matrix | Approved baseline | No unresolved blocking architecture decisions |
-| M1.1 | Scaffold Tauri, React/TS/Vite and Python package | M1.0 | Clean dev launch; lint/type-check commands exist |
+| M1.0 | Freeze decisions, repo conventions, toolchain matrix | Explicit Product Owner acceptance of the source-of-truth baseline and review fixes | No unresolved blocking architecture decisions; M1 scope and ADRs accepted |
+| M1.1 | Scaffold Tauri, React/TS/Vite and Python package | M1.0 plus explicit PO acceptance and merge of the accepted baseline | Clean dev launch; lint/type-check commands exist |
 | M1.2 | Backend lifecycle and process supervision | M1.1 | Startup, readiness, crash and shutdown tests pass |
 | M1.3 | Local API security and Rust proxy | M1.2 | Secret boundary and hostile-request tests pass |
 | M1.4 | SQLite, SQLAlchemy, Alembic and minimal entities | M1.1 | Fresh/upgrade migration and persistence tests pass |
@@ -96,7 +96,7 @@ Before implementation, reconcile task IDs and acceptance IDs against `TRACEABILI
 ## 6. Architectural decisions to freeze before coding
 
 1. **Backend packaging:** package Python as a Tauri sidecar executable for production; development may use the Python interpreter. PyInstaller is the initial candidate, not a proven fact. A spike must verify native dependencies, resource paths, Windows Defender/SmartScreen behavior, clean-machine startup and shutdown. If it fails, evaluate an alternative packager before feature work.
-2. **Port allocation:** Rust selects an available ephemeral loopback port and passes it to the backend. The backend must not silently fall back to a wildcard address.
+2. **Port allocation:** the backend binds `127.0.0.1:0` and reports the actual bound address over the protected readiness channel. Rust validates the reported numeric loopback address and nonzero port before enabling the narrow IPC proxy. Do not use a check-then-bind port reservation.
 3. **Authentication:** Rust retrieves or creates a high-entropy per-installation secret in Windows Credential Manager/DPAPI-backed storage and provisions it to the backend over a protected local bootstrap channel. React never receives it.
 4. **Frontend access:** React invokes narrowly scoped Tauri commands. Rust attaches authentication to requests to the local FastAPI service. Do not expose a general-purpose authenticated HTTP proxy.
 5. **Worker lifecycle:** one supervised backend process in M1. Scheduler/worker product behavior is deferred; no hidden service or Windows service is introduced.

@@ -10,37 +10,35 @@ Adopt this monorepo structure. Minor naming changes require architect approval; 
 ```text
 PostFlow/
 ├── apps/
-│   └── desktop/
-│       ├── src/                    # React UI
-│       ├── src-tauri/              # Rust/Tauri commands and lifecycle
-│       ├── public/
-│       └── package.json
-├── backend/
-│   ├── pyproject.toml
-│   ├── alembic.ini
-│   ├── migrations/
-│   │   └── versions/
-│   ├── src/postflow/
-│   │   ├── main.py                 # app factory entrypoint
-│   │   ├── api/
-│   │   ├── application/
-│   │   ├── domain/
-│   │   ├── infrastructure/
-│   │   ├── persistence/
-│   │   └── security/
-│   └── tests/
-│       ├── unit/
-│       ├── integration/
-│       └── contract/
+│   ├── desktop/
+│   │   ├── src/                    # React UI
+│   │   ├── src-tauri/              # Rust/Tauri commands and lifecycle
+│   │   ├── public/
+│   │   └── package.json
+│   └── backend/
+│       ├── postflow/
+│       │   ├── api/
+│       │   ├── application/
+│       │   ├── domain/
+│       │   ├── infrastructure/
+│       │   ├── integrations/
+│       │   ├── worker/
+│       │   └── main.py
+│       ├── migrations/
+│       ├── tests/
+│       └── pyproject.toml
+├── packages/
+│   └── contracts/
+├── tests/
+│   ├── integration/
+│   ├── e2e/
+│   └── security/
 ├── scripts/
 ├── docs/
 ├── .github/workflows/
-├── .editorconfig
 ├── .gitignore
-├── .pre-commit-config.yaml
-├── package.json
-├── pnpm-lock.yaml
-└── README.md
+├── README.md
+└── CONTRIBUTING.md
 ```
 
 Do not create additional deployable services. Rust commands remain thin transport/lifecycle adapters. Route handlers remain thin and delegate to application use cases. Domain rules must not depend on FastAPI, SQLAlchemy, Tauri or vendor SDKs.
