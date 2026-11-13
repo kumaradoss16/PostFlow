@@ -24,6 +24,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         description="Local-first desktop backend engine for PostFlow",
         docs_url="/docs" if settings.environment == "development" else None,
         redoc_url=None,
+        openapi_url="/openapi.json" if settings.environment == "development" else None,
     )
 
     # Wire settings dependency override

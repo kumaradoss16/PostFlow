@@ -166,9 +166,13 @@ export const App: React.FC = () => {
               <strong>App Runtime:</strong> {appInfo ? `${appInfo.name} v${appInfo.version} (${appInfo.platform})` : 'Loading...'}
             </div>
             <div>
-              <strong>Backend Status:</strong> {health ? `${health.status} (${health.host})` : 'Unchecked (click Check Health)'}
+              <strong>Backend Status:</strong>{' '}
+              {health ? `${health.status} (${health.host}) — M1.1 Dev Scaffold` : 'Unchecked (click Check Health)'}
             </div>
           </div>
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.75rem', marginBottom: 0 }}>
+            * Development scaffold: Supervised child process lifecycle and protected bootstrap handshake arrive in M1.2.
+          </p>
         </section>
       </main>
 
