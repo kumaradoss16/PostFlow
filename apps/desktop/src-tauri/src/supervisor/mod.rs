@@ -40,7 +40,8 @@ pub struct Supervisor {
     child_pid: Arc<RwLock<Option<u32>>>,
     started_at: Arc<RwLock<Option<Instant>>>,
     last_error: Arc<RwLock<Option<String>>>,
-    child_handle: Arc<Mutex<Option<tokio::process::Child>>>,
+    shutdown_trigger: Arc<Mutex<Option<tokio::sync::oneshot::Sender<()>>>>,
+    monitor_done: Arc<Mutex<Option<tokio::sync::oneshot::Receiver<()>>>>,
     http_client: reqwest::Client,
     explicit_python_path: Option<PathBuf>,
 }
@@ -54,7 +55,8 @@ impl Supervisor {
             child_pid: Arc::new(RwLock::new(None)),
             started_at: Arc::new(RwLock::new(None)),
             last_error: Arc::new(RwLock::new(None)),
-            child_handle: Arc::new(Mutex::new(None)),
+            shutdown_trigger: Arc::new(Mutex::new(None)),
+            monitor_done: Arc::new(Mutex::new(None)),
             http_client: reqwest::Client::builder()
                 .timeout(Duration::from_secs(10))
                 .build()
@@ -163,6 +165,17 @@ impl Supervisor {
 
         #[cfg(windows)]
         {
+            // F3: Pre-create named pipe server BEFORE spawning the child process
+            let pipe_server = match bootstrap::create_windows_pipe_server(&pipe_name) {
+                Ok(s) => s,
+                Err(e) => {
+                    let err = format!("Failed to pre-create bootstrap named pipe: {}", e);
+                    *self.last_error.write().await = Some(err.clone());
+                    *self.state.write().await = SupervisorState::Failed;
+                    return Err(err);
+                }
+            };
+
             const CREATE_NO_WINDOW: u32 = 0x08000000;
 
             let mut cmd = tokio::process::Command::new(&python_exe);
@@ -173,7 +186,7 @@ impl Supervisor {
             cmd.env("PYTHONUNBUFFERED", "1");
             cmd.creation_flags(CREATE_NO_WINDOW);
 
-            let child = match cmd.spawn() {
+            let mut child = match cmd.spawn() {
                 Ok(c) => c,
                 Err(e) => {
                     let err = format!(
@@ -194,44 +207,95 @@ impl Supervisor {
                     let err = "Failed to obtain child process ID".to_string();
                     *self.last_error.write().await = Some(err.clone());
                     *self.state.write().await = SupervisorState::Failed;
+                    let _ = child.kill().await;
                     return Err(err);
                 }
             };
 
             *self.child_pid.write().await = Some(pid);
-            *self.child_handle.lock().await = Some(child);
             *self.state.write().await = SupervisorState::Authenticating;
 
-            // Wait for handshake with 30s timeout
+            // Wait for handshake with 30s timeout on pre-created pipe server
             let handshake_res = tokio::time::timeout(
                 Duration::from_secs(30),
-                bootstrap::run_windows_pipe_handshake(&pipe_name, pid),
+                bootstrap::complete_windows_pipe_handshake(pipe_server, pid),
             )
             .await;
 
-            match handshake_res {
-                Ok(Ok((port, auth_token))) => {
-                    *self.port.write().await = Some(port);
-                    *self.auth_token.write().await = Some(auth_token);
-                    *self.started_at.write().await = Some(Instant::now());
-                    *self.state.write().await = SupervisorState::Ready;
-                    Ok(self.get_status().await)
-                }
+            let (port, auth_token) = match handshake_res {
+                Ok(Ok((p, tok))) => (p, tok),
                 Ok(Err(e)) => {
                     let err = format!("Backend bootstrap handshake failed: {}", e);
                     *self.last_error.write().await = Some(err.clone());
                     *self.state.write().await = SupervisorState::Failed;
-                    let _ = self.stop().await;
-                    Err(err)
+                    let _ = child.kill().await;
+                    let _ = child.wait().await;
+                    *self.child_pid.write().await = None;
+                    return Err(err);
                 }
                 Err(_) => {
                     let err = "Backend bootstrap timed out after 30 seconds".to_string();
                     *self.last_error.write().await = Some(err.clone());
                     *self.state.write().await = SupervisorState::Failed;
-                    let _ = self.stop().await;
-                    Err(err)
+                    let _ = child.kill().await;
+                    let _ = child.wait().await;
+                    *self.child_pid.write().await = None;
+                    return Err(err);
                 }
-            }
+            };
+
+            *self.port.write().await = Some(port);
+            *self.auth_token.write().await = Some(auth_token);
+            *self.started_at.write().await = Some(Instant::now());
+            *self.state.write().await = SupervisorState::Ready;
+
+            // F4: Spawn process monitor task watching the child process
+            let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+            let (done_tx, done_rx) = tokio::sync::oneshot::channel::<()>();
+
+            let state_clone = self.state.clone();
+            let port_clone = self.port.clone();
+            let auth_token_clone = self.auth_token.clone();
+            let child_pid_clone = self.child_pid.clone();
+            let started_at_clone = self.started_at.clone();
+            let last_error_clone = self.last_error.clone();
+
+            tokio::spawn(async move {
+                tokio::select! {
+                    exit_res = child.wait() => {
+                        let mut state = state_clone.write().await;
+                        // Only mark Failed if not in deliberate stopping/stopped state
+                        if *state != SupervisorState::Stopping && *state != SupervisorState::Stopped {
+                            let err = match exit_res {
+                                Ok(status) => format!("Backend child process terminated unexpectedly ({})", status),
+                                Err(e) => format!("Failed waiting on backend child: {}", e),
+                            };
+                            *last_error_clone.write().await = Some(err);
+                            *state = SupervisorState::Failed;
+                            *port_clone.write().await = None;
+                            *auth_token_clone.write().await = None;
+                            *child_pid_clone.write().await = None;
+                            *started_at_clone.write().await = None;
+                        }
+                        let _ = done_tx.send(());
+                    }
+                    _ = shutdown_rx => {
+                        // Intentional shutdown requested: allow up to 5s for child to exit cleanly
+                        let wait_res = tokio::time::timeout(Duration::from_secs(5), child.wait()).await;
+                        if wait_res.is_err() {
+                            // Timeout expired: forced termination fallback
+                            let _ = child.kill().await;
+                            let _ = child.wait().await;
+                        }
+                        let _ = done_tx.send(());
+                    }
+                }
+            });
+
+            *self.shutdown_trigger.lock().await = Some(shutdown_tx);
+            *self.monitor_done.lock().await = Some(done_rx);
+
+            Ok(self.get_status().await)
         }
 
         #[cfg(not(windows))]
@@ -251,7 +315,7 @@ impl Supervisor {
 
         *self.state.write().await = SupervisorState::Stopping;
 
-        // 1. Send graceful shutdown request if port and auth token exist
+        // 1. Send authenticated graceful shutdown request to FastAPI
         let port_opt = *self.port.read().await;
         let token_opt = self.auth_token.read().await.clone();
 
@@ -266,19 +330,16 @@ impl Supervisor {
                 .await;
         }
 
-        // 2. Wait up to 5s for child process to exit cleanly, then kill
-        let mut child_guard = self.child_handle.lock().await;
-        if let Some(mut child) = child_guard.take() {
-            let wait_res = tokio::time::timeout(Duration::from_secs(5), child.wait()).await;
-            match wait_res {
-                Ok(Ok(exit_status)) => {
-                    log_or_print(&format!("Backend child exited cleanly: {}", exit_status));
-                }
-                _ => {
-                    let _ = child.kill().await;
-                    let _ = child.wait().await;
-                }
-            }
+        // 2. Trigger monitor task shutdown and wait for process completion
+        let trigger = self.shutdown_trigger.lock().await.take();
+        if let Some(tx) = trigger {
+            let _ = tx.send(());
+        }
+
+        let done_rx = self.monitor_done.lock().await.take();
+        if let Some(rx) = done_rx {
+            // Allow up to 6 seconds for monitor task to complete clean exit or forced fallback
+            let _ = tokio::time::timeout(Duration::from_secs(6), rx).await;
         }
 
         // 3. Clear state
@@ -316,8 +377,6 @@ impl Supervisor {
     }
 }
 
-fn log_or_print(_msg: &str) {}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -331,5 +390,58 @@ mod tests {
         assert_eq!(status.state, SupervisorState::Stopped);
         assert!(status.port.is_none());
         assert!(status.pid.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_proxy_request_rejects_when_not_ready() {
+        let supervisor = Supervisor::new(None);
+        let req = BackendProxyRequest {
+            method: "GET".to_string(),
+            path: "/api/v1/health".to_string(),
+            query: None,
+            body: None,
+        };
+        let res = supervisor.proxy_request(req).await;
+        assert!(res.is_err());
+        assert!(res.unwrap_err().contains("Backend is not ready"));
+    }
+
+    #[tokio::test]
+    async fn test_supervisor_stop_idempotent() {
+        let supervisor = Supervisor::new(None);
+        let res1 = supervisor.stop().await.expect("First stop failed");
+        assert_eq!(res1.state, SupervisorState::Stopped);
+
+        let res2 = supervisor.stop().await.expect("Second stop failed");
+        assert_eq!(res2.state, SupervisorState::Stopped);
+    }
+
+    #[tokio::test]
+    async fn test_proxy_request_rejects_when_failed() {
+        let supervisor = Supervisor::new(None);
+        *supervisor.state.write().await = SupervisorState::Failed;
+        *supervisor.last_error.write().await = Some("Child terminated unexpectedly".to_string());
+
+        let req = BackendProxyRequest {
+            method: "GET".to_string(),
+            path: "/api/v1/health".to_string(),
+            query: None,
+            body: None,
+        };
+        let res = supervisor.proxy_request(req).await;
+        assert!(res.is_err());
+        assert!(res.unwrap_err().contains("Backend is not ready"));
+    }
+
+    #[tokio::test]
+    async fn test_supervisor_concurrency_start_guard() {
+        let supervisor = Supervisor::new(None);
+        *supervisor.state.write().await = SupervisorState::Starting;
+
+        let res = supervisor.start().await;
+        assert!(res.is_err());
+        assert!(res
+            .unwrap_err()
+            .contains("already in the process of starting"));
     }
 }
