@@ -90,8 +90,9 @@ impl Supervisor {
                 let backend_dir = path
                     .parent()
                     .and_then(|p| p.parent())
-                    .unwrap_or_else(|| Path::new("."));
-                return (path.clone(), backend_dir.to_path_buf());
+                    .map(|p| p.to_path_buf())
+                    .unwrap_or_else(|| PathBuf::from("."));
+                return (path.clone(), backend_dir);
             }
         }
 
@@ -102,8 +103,9 @@ impl Supervisor {
                 let backend_dir = p
                     .parent()
                     .and_then(|par| par.parent())
-                    .unwrap_or_else(|| Path::new("."));
-                return (p, backend_dir.to_path_buf());
+                    .map(|par| par.to_path_buf())
+                    .unwrap_or_else(|| PathBuf::from("."));
+                return (p, backend_dir);
             }
         }
 
@@ -161,7 +163,6 @@ impl Supervisor {
 
         #[cfg(windows)]
         {
-            use std::os::windows::process::CommandExt;
             const CREATE_NO_WINDOW: u32 = 0x08000000;
 
             let mut cmd = tokio::process::Command::new(&python_exe);
@@ -315,12 +316,7 @@ impl Supervisor {
     }
 }
 
-fn log_or_print(msg: &str) {
-    #[cfg(feature = "tracing")]
-    tracing::info!("{}", msg);
-    #[cfg(not(feature = "tracing"))]
-    let _ = msg;
-}
+fn log_or_print(_msg: &str) {}
 
 #[cfg(test)]
 mod tests {
