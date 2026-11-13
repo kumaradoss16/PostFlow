@@ -138,18 +138,24 @@ where
 }
 
 #[cfg(windows)]
-pub async fn run_windows_pipe_handshake(
+pub fn create_windows_pipe_server(
     pipe_name: &str,
-    expected_child_pid: u32,
-) -> Result<(u16, String), String> {
-    use std::os::windows::io::AsRawHandle;
+) -> Result<tokio::net::windows::named_pipe::NamedPipeServer, String> {
     use tokio::net::windows::named_pipe::ServerOptions;
 
-    let server = ServerOptions::new()
+    ServerOptions::new()
         .first_pipe_instance(true)
         .max_instances(1)
         .create(pipe_name)
-        .map_err(|e| format!("Failed to create named pipe {}: {}", pipe_name, e))?;
+        .map_err(|e| format!("Failed to create named pipe {}: {}", pipe_name, e))
+}
+
+#[cfg(windows)]
+pub async fn complete_windows_pipe_handshake(
+    server: tokio::net::windows::named_pipe::NamedPipeServer,
+    expected_child_pid: u32,
+) -> Result<(u16, String), String> {
+    use std::os::windows::io::AsRawHandle;
 
     server
         .connect()
@@ -178,6 +184,15 @@ pub async fn run_windows_pipe_handshake(
 
     let (reader, writer) = tokio::io::split(server);
     perform_handshake_over_stream(reader, writer).await
+}
+
+#[cfg(windows)]
+pub async fn run_windows_pipe_handshake(
+    pipe_name: &str,
+    expected_child_pid: u32,
+) -> Result<(u16, String), String> {
+    let server = create_windows_pipe_server(pipe_name)?;
+    complete_windows_pipe_handshake(server, expected_child_pid).await
 }
 
 #[cfg(test)]

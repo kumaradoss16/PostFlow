@@ -96,6 +96,53 @@ def test_api_v1_shutdown_endpoint(test_client: TestClient) -> None:
     assert response.json()["status"] == "shutting_down"
 
 
+def test_shutdown_sets_server_should_exit(test_barrier_state: AuthBarrierState) -> None:
+    """Verify POST /api/v1/shutdown coordinates graceful exit via server.should_exit."""
+    settings = Settings(environment="test")
+    app = create_app(settings=settings, barrier_state=test_barrier_state)
+
+    class MockServer:
+        should_exit = False
+
+    mock_server = MockServer()
+    app.state.server = mock_server
+
+    client = TestClient(
+        app,
+        base_url="http://127.0.0.1",
+        headers={AUTH_HEADER_NAME: TEST_AUTH_TOKEN},
+    )
+
+    response = client.post("/api/v1/shutdown")
+    assert response.status_code == 200
+    assert response.json()["status"] == "shutting_down"
+    assert mock_server.should_exit is True
+
+
+def test_unauthenticated_shutdown_rejected() -> None:
+    """Verify that unauthenticated shutdown requests are rejected with 401."""
+    barrier_state = AuthBarrierState(initially_active=True, token=TEST_AUTH_TOKEN)
+    settings = Settings(environment="production")
+    app = create_app(settings=settings, barrier_state=barrier_state)
+    client = TestClient(app, base_url="http://127.0.0.1")
+
+    response = client.post("/api/v1/shutdown")
+    assert response.status_code == 401
+
+
+def test_lifespan_startup_and_shutdown_execution(test_barrier_state: AuthBarrierState) -> None:
+    """Verify FastAPI lifespan startup and shutdown hooks execute during server lifecycle."""
+    settings = Settings(environment="test")
+    app = create_app(settings=settings, barrier_state=test_barrier_state)
+
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        assert getattr(app.state, "lifespan_active", False) is True
+        res = client.get("/health")
+        assert res.status_code == 200
+
+    assert getattr(app.state, "lifespan_active", True) is False
+
+
 def test_rejects_untrusted_host_header(test_barrier_state: AuthBarrierState) -> None:
     """Verify requests with untrusted Host header are rejected by TrustedHostMiddleware."""
     settings = Settings(environment="development")

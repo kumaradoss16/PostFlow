@@ -3,6 +3,8 @@
 import argparse
 import socket
 import sys
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,6 +20,14 @@ from postflow.middleware.auth_barrier import (
     AuthenticationBarrierMiddleware,
     get_auth_barrier_state,
 )
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """Application lifespan context manager for startup and graceful shutdown."""
+    app.state.lifespan_active = True
+    yield
+    app.state.lifespan_active = False
 
 
 def create_app(
@@ -41,6 +51,7 @@ def create_app(
         title="PostFlow Backend",
         version=__version__,
         description="Local-first desktop backend engine for PostFlow",
+        lifespan=lifespan,
         docs_url="/docs" if settings.environment == "development" else None,
         redoc_url=None,
         openapi_url="/openapi.json" if settings.environment == "development" else None,
@@ -145,6 +156,7 @@ def main() -> None:
 
         config = uvicorn.Config(app, log_level="info")
         server = uvicorn.Server(config)
+        app.state.server = server
         server.run(sockets=[sock])
         return
 
@@ -164,13 +176,10 @@ def main() -> None:
             log_level="info",
         )
     else:
-        uvicorn.run(
-            app,
-            host="127.0.0.1",
-            port=args.port,
-            reload=False,
-            log_level="info",
-        )
+        config = uvicorn.Config(app, host="127.0.0.1", port=args.port, log_level="info")
+        server = uvicorn.Server(config)
+        app.state.server = server
+        server.run()
 
 
 if __name__ == "__main__":
