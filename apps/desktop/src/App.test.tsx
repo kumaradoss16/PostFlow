@@ -8,7 +8,7 @@ describe('PostFlow Application Shell', () => {
       render(<App />);
     });
     expect(screen.getByText('PostFlow')).toBeInTheDocument();
-    expect(screen.getByText('M1.1 Application Foundation')).toBeInTheDocument();
+    expect(screen.getAllByText('M1.2 Secure Backend Bootstrap')[0]).toBeInTheDocument();
   });
 
   it('renders the modular monolith architecture status cards', async () => {
@@ -24,18 +24,18 @@ describe('PostFlow Application Shell', () => {
     await act(async () => {
       render(<App />);
     });
-    expect(screen.getByText('Strict Loopback')).toBeInTheDocument();
+    expect(screen.getByText('Dynamic Loopback Binding')).toBeInTheDocument();
     expect(screen.getByText('Zero Secret Exposure')).toBeInTheDocument();
-    expect(screen.getByText('Strict CSP & Typed IPC')).toBeInTheDocument();
+    expect(screen.getByText('Rust-Mediated IPC Proxy')).toBeInTheDocument();
   });
 
-  it('renders development verification panel with M1.2 boundary disclaimer', async () => {
+  it('renders backend supervisor control panel and action buttons', async () => {
     await act(async () => {
       render(<App />);
     });
-    expect(screen.getByText('Development Verification')).toBeInTheDocument();
-    expect(
-      screen.getByText(/Development scaffold: Supervised child process lifecycle/i)
-    ).toBeInTheDocument();
+    expect(screen.getByText('Backend Process Supervisor')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /start/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /stop/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /check health/i })).toBeInTheDocument();
   });
 });
