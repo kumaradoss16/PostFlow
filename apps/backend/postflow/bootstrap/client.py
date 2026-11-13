@@ -7,44 +7,137 @@ from typing import Any
 
 from postflow.middleware.auth_barrier import AuthBarrierState
 
+if sys.platform == "win32":
+    import ctypes
+    from ctypes import wintypes
+
+    GENERIC_READ = 0x80000000
+    GENERIC_WRITE = 0x40000000
+    OPEN_EXISTING = 3
+    FILE_ATTRIBUTE_NORMAL = 0x80
+    INVALID_HANDLE_VALUE = wintypes.HANDLE(-1).value
+    ERROR_FILE_NOT_FOUND = 2
+    ERROR_PIPE_BUSY = 231
+
+    _kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+
+    _kernel32.CreateFileW.restype = wintypes.HANDLE
+    _kernel32.CreateFileW.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    ]
+
+    _kernel32.ReadFile.restype = wintypes.BOOL
+    _kernel32.ReadFile.argtypes = [
+        wintypes.HANDLE,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+        ctypes.POINTER(wintypes.DWORD),
+        wintypes.LPVOID,
+    ]
+
+    _kernel32.WriteFile.restype = wintypes.BOOL
+    _kernel32.WriteFile.argtypes = [
+        wintypes.HANDLE,
+        wintypes.LPCVOID,
+        wintypes.DWORD,
+        ctypes.POINTER(wintypes.DWORD),
+        wintypes.LPVOID,
+    ]
+
+    _kernel32.CloseHandle.restype = wintypes.BOOL
+    _kernel32.CloseHandle.argtypes = [
+        wintypes.HANDLE,
+    ]
+
+    _kernel32.WaitNamedPipeW.restype = wintypes.BOOL
+    _kernel32.WaitNamedPipeW.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+    ]
+
+
+def is_windows_named_pipe_path(path: str) -> bool:
+    """Validate whether the path is a valid Windows named pipe path format.
+
+    Format requirement: \\\\.\\pipe\\<pipename> (case-insensitive)
+    The pipe name must be non-empty and must not contain path traversal characters.
+    """
+    if not isinstance(path, str):
+        return False
+    normalized = path.strip()
+    prefix = "\\\\.\\pipe\\"
+    if not normalized.lower().startswith(prefix.lower()):
+        return False
+    pipe_name = normalized[len(prefix) :]
+    if not pipe_name or "/" in pipe_name or "\\" in pipe_name or ".." in pipe_name:
+        return False
+    return True
+
 
 class WindowsNamedPipeTransport:
     """Synchronous transport for Windows named pipes using kernel32."""
 
     def __init__(self, pipe_path: str) -> None:
         self.pipe_path = pipe_path
-        self._handle: int | None = None
+        self._handle: Any = None
         self._buffer = b""
 
-    def connect(self) -> None:
-        """Connect to the parent supervisor named pipe."""
+    def connect(self, timeout_seconds: float = 10.0) -> None:
+        """Connect to the parent supervisor named pipe with bounded retry."""
         if sys.platform != "win32":
             raise RuntimeError("WindowsNamedPipeTransport is only supported on Windows.")
 
+        if self._handle is not None:
+            return
+
         import ctypes
+        import time
 
         kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
-        generic_read = 0x80000000
-        generic_write = 0x40000000
-        open_existing = 3
-        invalid_handle_value = -1
+        deadline = time.monotonic() + timeout_seconds
 
-        handle = kernel32.CreateFileW(
-            self.pipe_path,
-            generic_read | generic_write,
-            0,
-            None,
-            open_existing,
-            0,
-            None,
-        )
-        if handle == invalid_handle_value or handle == 0:
-            error_code = kernel32.GetLastError()
-            raise ConnectionError(
-                f"Failed to connect to supervisor bootstrap pipe '{self.pipe_path}', "
-                f"error: {error_code}"
+        while True:
+            handle = kernel32.CreateFileW(
+                self.pipe_path,
+                GENERIC_READ | GENERIC_WRITE,
+                0,
+                None,
+                OPEN_EXISTING,
+                FILE_ATTRIBUTE_NORMAL,
+                None,
             )
-        self._handle = handle
+
+            # Check handle validity using 64-bit comparison
+            if handle is not None and handle != 0 and handle != INVALID_HANDLE_VALUE:
+                self._handle = handle
+                return
+
+            err = kernel32.GetLastError()
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise ConnectionError(
+                    f"Timed out after {timeout_seconds}s connecting to supervisor bootstrap pipe "
+                    f"'{self.pipe_path}' (last error: {err})"
+                )
+
+            # Bounded retry for transient pipe startup states
+            if err == ERROR_FILE_NOT_FOUND:
+                time.sleep(min(0.05, max(0.001, remaining)))
+            elif err == ERROR_PIPE_BUSY:
+                wait_ms = max(1, min(int(remaining * 1000), 500))
+                kernel32.WaitNamedPipeW(self.pipe_path, wait_ms)
+            else:
+                # Permanent error
+                raise ConnectionError(
+                    f"Failed to connect to supervisor bootstrap pipe '{self.pipe_path}', "
+                    f"error: {err}"
+                )
 
     def send_line(self, line: str) -> None:
         """Send a newline-terminated UTF-8 line across the pipe."""
@@ -99,13 +192,15 @@ class WindowsNamedPipeTransport:
         return line_bytes.decode("utf-8").strip()
 
     def close(self) -> None:
-        """Close the pipe handle and clear buffers."""
-        if self._handle is not None and sys.platform == "win32":
-            import ctypes
-
-            ctypes.windll.kernel32.CloseHandle(self._handle)  # type: ignore[attr-defined]
-            self._handle = None
+        """Close the pipe handle exactly once and clear buffers."""
+        handle = self._handle
+        self._handle = None
         self._buffer = b""
+        if sys.platform == "win32" and handle is not None:
+            if handle != 0 and handle != INVALID_HANDLE_VALUE:
+                import ctypes
+
+                ctypes.windll.kernel32.CloseHandle(handle)  # type: ignore[attr-defined]
 
 
 class SocketOrMockTransport:
@@ -150,7 +245,7 @@ class SocketOrMockTransport:
 
 def get_transport(pipe_path: str) -> Any:
     """Factory selecting the appropriate transport."""
-    if sys.platform == "win32" and pipe_path.startswith(r"\\.\pipe\\"):
+    if sys.platform == "win32" and is_windows_named_pipe_path(pipe_path):
         return WindowsNamedPipeTransport(pipe_path)
     return SocketOrMockTransport(pipe_path)
 
