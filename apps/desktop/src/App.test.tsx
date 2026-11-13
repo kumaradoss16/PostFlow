@@ -28,4 +28,14 @@ describe('PostFlow Application Shell', () => {
     expect(screen.getByText('Zero Secret Exposure')).toBeInTheDocument();
     expect(screen.getByText('Strict CSP & Typed IPC')).toBeInTheDocument();
   });
+
+  it('renders development verification panel with M1.2 boundary disclaimer', async () => {
+    await act(async () => {
+      render(<App />);
+    });
+    expect(screen.getByText('Development Verification')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Development scaffold: Supervised child process lifecycle/i)
+    ).toBeInTheDocument();
+  });
 });

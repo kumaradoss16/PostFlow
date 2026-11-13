@@ -52,3 +52,23 @@ def test_rejects_untrusted_host_header() -> None:
     # Send request with hostile Host header
     response = client.get("/health", headers={"Host": "evil.com"})
     assert response.status_code == 400
+
+
+def test_health_response_contains_no_sensitive_data(test_client: TestClient) -> None:
+    """Verify health endpoint does not disclose sensitive information, paths, or secrets."""
+    response = test_client.get("/health")
+    assert response.status_code == 200
+    data = response.json()
+    assert set(data.keys()) == {"status", "version", "environment", "host"}
+    sensitive_keys = {"token", "secret", "password", "path", "database", "key", "config", "debug"}
+    assert not sensitive_keys.intersection(data.keys())
+
+
+def test_production_docs_endpoint_disabled() -> None:
+    """Verify that in production environment, API documentation endpoints are disabled."""
+    settings = Settings(environment="production")
+    app = create_app(settings=settings)
+    client = TestClient(app, base_url="http://127.0.0.1")
+    assert client.get("/docs").status_code == 404
+    assert client.get("/redoc").status_code == 404
+    assert client.get("/openapi.json").status_code == 404
