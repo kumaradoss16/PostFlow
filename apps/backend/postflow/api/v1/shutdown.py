@@ -1,11 +1,10 @@
 """Graceful shutdown endpoint for PostFlow local backend."""
 
-import asyncio
 import os
 import signal
 import sys
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, BackgroundTasks, Request, status
 from pydantic import BaseModel, Field
 
 router = APIRouter()
@@ -23,18 +22,23 @@ class ShutdownResponse(BaseModel):
     status_code=status.HTTP_200_OK,
     summary="Trigger graceful backend shutdown",
 )
-async def shutdown() -> ShutdownResponse:
-    """Initiate graceful server shutdown sequence."""
+async def shutdown(request: Request, background_tasks: BackgroundTasks) -> ShutdownResponse:
+    """Initiate graceful server shutdown sequence.
+
+    Sets server.should_exit on the running Uvicorn server after the response
+    has been dispatched, allowing active requests to drain and FastAPI lifespan
+    cleanup handlers to execute cleanly.
+    """
+    server = getattr(request.app.state, "server", None)
 
     def _trigger_exit() -> None:
-        if sys.platform == "win32":
-            # On Windows, send SIGTERM or SIGINT
-            os.kill(os.getpid(), signal.SIGTERM)
+        if server is not None:
+            server.should_exit = True
         else:
-            os.kill(os.getpid(), signal.SIGINT)
+            if sys.platform != "win32":
+                os.kill(os.getpid(), signal.SIGINT)
 
-    # Schedule exit after response is dispatched to caller
-    loop = asyncio.get_running_loop()
-    loop.call_later(0.1, _trigger_exit)
+    # Background task executes immediately after the response is sent to caller
+    background_tasks.add_task(_trigger_exit)
 
     return ShutdownResponse(status="shutting_down")
