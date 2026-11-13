@@ -1,6 +1,7 @@
 """PostFlow backend application entry point and factory."""
 
 import argparse
+import socket
 import sys
 
 from fastapi import FastAPI
@@ -10,13 +11,31 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from postflow import __version__
 from postflow.api.v1 import api_v1_router
 from postflow.api.v1.health import router as root_health_router
+from postflow.bootstrap import run_bootstrap_handshake
 from postflow.infrastructure.config import Settings, get_settings
+from postflow.middleware.auth_barrier import (
+    AuthBarrierState,
+    AuthenticationBarrierMiddleware,
+    get_auth_barrier_state,
+)
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    barrier_state: AuthBarrierState | None = None,
+) -> FastAPI:
     """Create and configure the FastAPI application instance."""
     if settings is None:
         settings = get_settings()
+
+    if barrier_state is None:
+        barrier_state = get_auth_barrier_state()
+
+    # Configure dev health probe allowance
+    if settings.environment in ("development", "test"):
+        barrier_state.allow_dev_health = True
+    else:
+        barrier_state.allow_dev_health = False
 
     app = FastAPI(
         title="PostFlow Backend",
@@ -34,13 +53,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     if settings.environment == "test":
         allowed_hosts.append("testserver")
 
-    # Restrict host header to loopback
+    # 1. Enforce authentication barrier across all endpoints
+    app.add_middleware(
+        AuthenticationBarrierMiddleware,
+        barrier_state=barrier_state,
+    )
+
+    # 2. Restrict host header to loopback
     app.add_middleware(
         TrustedHostMiddleware,
         allowed_hosts=allowed_hosts,
     )
 
-    # Restrict CORS to trusted local origins
+    # 3. Restrict CORS to trusted local origins
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[
@@ -54,21 +79,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["*"],
     )
 
-    # Register API routes conditionally based on environment.
-    # Per LOCAL_API_SECURITY_SPEC.md (Section 3.3), unauthenticated HTTP endpoints are strictly
-    # prohibited in production. Unauthenticated /health endpoints are mounted solely in development
-    # and test environments for developer smoke verification and automated test fixtures.
-    # In production (M1.2+), process readiness is handled exclusively via the protected
-    # bootstrap channel.
+    # 4. Mount application API routes
+    app.include_router(api_v1_router)
+
+    # Root /health is mounted strictly in development and test environments
     if settings.environment in ("development", "test"):
-        app.include_router(api_v1_router)
         app.include_router(root_health_router, prefix="", tags=["health"])
 
     return app
 
 
 def main() -> None:
-    """Main CLI execution entry point for local development."""
+    """Main CLI execution entry point for PostFlow backend."""
     parser = argparse.ArgumentParser(description="PostFlow Local Backend")
     parser.add_argument(
         "--host",
@@ -87,6 +109,12 @@ def main() -> None:
         action="store_true",
         help="Enable auto-reload for development",
     )
+    parser.add_argument(
+        "--bootstrap-pipe",
+        type=str,
+        default=None,
+        help="Named pipe path for supervisor bootstrap authentication",
+    )
 
     args = parser.parse_args()
 
@@ -100,6 +128,32 @@ def main() -> None:
 
     import uvicorn
 
+    barrier_state = get_auth_barrier_state()
+
+    # M1.2 Supervised bootstrap execution mode
+    if args.bootstrap_pipe:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.bind(("127.0.0.1", 0))
+        sock.listen(128)
+        bound_port = sock.getsockname()[1]
+
+        settings = Settings(port=bound_port, environment="production")
+        app = create_app(settings=settings, barrier_state=barrier_state)
+
+        # Run handshake over protected pipe
+        run_bootstrap_handshake(args.bootstrap_pipe, bound_port, barrier_state)
+
+        config = uvicorn.Config(app, log_level="info")
+        server = uvicorn.Server(config)
+        server.run(sockets=[sock])
+        return
+
+    # Standalone development mode
+    settings = Settings(port=args.port, environment="development")
+    barrier_state.activate("dev-insecure-local-bootstrap-token-test")
+    barrier_state.allow_dev_health = True
+    app = create_app(settings=settings, barrier_state=barrier_state)
+
     if args.reload:
         uvicorn.run(
             "postflow.main:create_app",
@@ -110,7 +164,6 @@ def main() -> None:
             log_level="info",
         )
     else:
-        app = create_app()
         uvicorn.run(
             app,
             host="127.0.0.1",

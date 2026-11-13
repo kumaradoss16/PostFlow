@@ -54,7 +54,7 @@ export const Header: React.FC = () => {
           }}
         >
           <ShieldCheck size={14} />
-          M1.1 Application Foundation
+          M1.2 Secure Backend Bootstrap
         </span>
       </div>
     </header>

@@ -1,4 +1,9 @@
+pub mod supervisor;
+
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use supervisor::{BackendProxyRequest, BackendProxyResponse, Supervisor, SupervisorStatus};
+use tauri::State;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -20,6 +25,10 @@ pub struct BackendHealthResponse {
     pub host: String,
 }
 
+pub struct AppState {
+    pub supervisor: Arc<Supervisor>,
+}
+
 /// Retrieve desktop application identity and platform metadata.
 #[tauri::command]
 fn get_app_info() -> Result<AppInfoResponse, String> {
@@ -33,17 +42,53 @@ fn get_app_info() -> Result<AppInfoResponse, String> {
     })
 }
 
-/// Development verification command for backend health.
-/// NOTE: In M1.2, this is replaced by the supervised child process
-/// lifecycle and protected bootstrap pipe handshake.
+/// Retrieve current backend supervisor lifecycle state.
 #[tauri::command]
-fn check_backend_health() -> Result<BackendHealthResponse, String> {
-    Ok(BackendHealthResponse {
-        status: "ok".to_string(),
-        version: "0.1.0".to_string(),
-        environment: "development".to_string(),
-        host: "127.0.0.1".to_string(),
-    })
+async fn backend_get_status(state: State<'_, AppState>) -> Result<SupervisorStatus, String> {
+    Ok(state.supervisor.get_status().await)
+}
+
+/// Start the backend process and perform secure bootstrap handshake.
+#[tauri::command]
+async fn backend_start(state: State<'_, AppState>) -> Result<SupervisorStatus, String> {
+    state.supervisor.start().await
+}
+
+/// Stop the backend process gracefully.
+#[tauri::command]
+async fn backend_stop(state: State<'_, AppState>) -> Result<SupervisorStatus, String> {
+    state.supervisor.stop().await
+}
+
+/// Mediate HTTP request to local backend through secure Rust proxy.
+#[tauri::command]
+async fn backend_proxy_request(
+    state: State<'_, AppState>,
+    request: BackendProxyRequest,
+) -> Result<BackendProxyResponse, String> {
+    state.supervisor.proxy_request(request).await
+}
+
+/// Health check command proxying to /api/v1/health.
+#[tauri::command]
+async fn check_backend_health(state: State<'_, AppState>) -> Result<BackendHealthResponse, String> {
+    let proxy_req = BackendProxyRequest {
+        method: "GET".to_string(),
+        path: "/api/v1/health".to_string(),
+        query: None,
+        body: None,
+    };
+
+    let proxy_res = state.supervisor.proxy_request(proxy_req).await?;
+
+    if let Some(data) = proxy_res.data {
+        serde_json::from_value::<BackendHealthResponse>(data)
+            .map_err(|e| format!("Failed to parse health response: {}", e))
+    } else {
+        Err(proxy_res
+            .error
+            .unwrap_or_else(|| "Unknown backend health error".to_string()))
+    }
 }
 
 fn rustc_version_runtime() -> String {
@@ -52,10 +97,30 @@ fn rustc_version_runtime() -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![get_app_info, check_backend_health])
-        .run(tauri::generate_context!())
-        .expect("error while running PostFlow desktop application");
+    let supervisor = Arc::new(Supervisor::new(None));
+    let supervisor_exit = supervisor.clone();
+
+    let app = tauri::Builder::default()
+        .manage(AppState { supervisor })
+        .invoke_handler(tauri::generate_handler![
+            get_app_info,
+            backend_get_status,
+            backend_start,
+            backend_stop,
+            backend_proxy_request,
+            check_backend_health,
+        ])
+        .build(tauri::generate_context!())
+        .expect("error while building PostFlow desktop application");
+
+    app.run(move |_app_handle, event| {
+        if let tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit = event {
+            let sup = supervisor_exit.clone();
+            let _ = tokio::runtime::Runtime::new().map(|rt| {
+                rt.block_on(sup.stop());
+            });
+        }
+    });
 }
 
 #[cfg(test)]
@@ -68,12 +133,5 @@ mod tests {
         assert_eq!(info.name, "PostFlow");
         assert_eq!(info.version, "0.1.0");
         assert!(!info.tauri_version.is_empty());
-    }
-
-    #[test]
-    fn test_check_backend_health() {
-        let health = check_backend_health().expect("check_backend_health failed");
-        assert_eq!(health.status, "ok");
-        assert_eq!(health.host, "127.0.0.1");
     }
 }

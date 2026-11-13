@@ -1,4 +1,4 @@
-# PostFlow Full Verification Suite (M1.1)
+# PostFlow Full Verification Suite (M1.2)
 $ErrorActionPreference = "Stop"
 
 Write-Host "`n=== 1. VERIFYING PYTHON BACKEND ===" -ForegroundColor Cyan
@@ -81,4 +81,4 @@ try {
     Pop-Location
 }
 
-Write-Host "`n>>> ALL M1.1 VERIFICATION CHECKS PASSED SUCCESSFULLY! <<<" -ForegroundColor Green
+Write-Host "`n>>> ALL M1.2 VERIFICATION CHECKS PASSED SUCCESSFULLY! <<<" -ForegroundColor Green
