@@ -82,3 +82,17 @@ The Rust supervisor (`postflow_desktop_lib::supervisor`) implements an explicit,
 ### 3.3 Rust Shell Verification
 - **Cargo Format Check**: `cargo fmt --all -- --check` passed cleanly
 - **Rust Compiler Gates**: Automated via GitHub Actions Windows CI (`windows-latest`)
+
+---
+
+## 4. M1.2.1 Runtime Hardening & Acceptance Closure
+
+Following internal security and runtime audit review, Milestone M1.2.1 was executed on branch `fix/m1.2-bootstrap-runtime-acceptance` to harden:
+1. Windows named-pipe prefix detection (`\\\\.\\pipe\\`).
+2. 64-bit ctypes `HANDLE` prototypes and lifecycle management.
+3. Named-pipe startup synchronization and bounded connection retry.
+4. Active supervisor background monitoring of child process state.
+5. Graceful Windows backend shutdown via FastAPI background tasks and Uvicorn lifespan coordination.
+
+For complete audit and acceptance verification details, see [M1_2_1_RUNTIME_HARDENING_REPORT.md](file:///d:/AI/PostFlow/docs/M1_2_1_RUNTIME_HARDENING_REPORT.md).
+
